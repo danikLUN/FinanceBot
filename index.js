@@ -18,6 +18,10 @@ function mainMenu() {
   ]).resize();
 }
 
+function backButton() {
+  return Markup.keyboard([['🔙 Вернуться в меню']]).resize();
+}
+
 bot.start((ctx) => {
   userStates[ctx.from.id] = {};
   ctx.reply('Привет! Что хочешь сделать?', mainMenu());
@@ -28,29 +32,34 @@ bot.hears('🔄 Перезапуск', (ctx) => {
   ctx.reply('Бот перезапущен', mainMenu());
 });
 
+bot.hears('🔙 Вернуться в меню', (ctx) => {
+  userStates[ctx.from.id] = {};
+  ctx.reply('Главное меню:', mainMenu());
+});
+
 bot.hears('💰 Лимит', (ctx) => {
   userStates[ctx.from.id] = { stage: 'awaiting_limit' };
-  ctx.reply('Введи лимит на день в рублях (например: 500):');
+  ctx.reply('Введи лимит на день в рублях (например: 500):', backButton());
 });
 
 bot.hears('➕ Добавить трату', (ctx) => {
   userStates[ctx.from.id] = { stage: 'awaiting_category' };
-  ctx.reply('Выбери категорию:', Markup.keyboard(categories).resize());
+  ctx.reply('Выбери категорию:', Markup.keyboard([...categories.map(c => [c]), ['🔙 Вернуться в меню']]).resize());
 });
 
 bot.hears('📊 Статистика', (ctx) => {
   const userId = ctx.from.id;
   db.getCategoryStats(userId, (rows) => {
-    if (!rows.length) return ctx.reply('У тебя нет трат для статистики.');
+    if (!rows.length) return ctx.reply('У тебя нет трат для статистики.', backButton());
     const stats = rows.map(r => `${r.category}: ${r.total}₽`).join('\n');
-    ctx.reply(`📊 Твоя статистика по категориям:\n\n${stats}`);
+    ctx.reply(`📊 Твоя статистика по категориям:\n\n${stats}`, backButton());
   });
 });
 
 bot.hears('💾 Экспорт', (ctx) => {
   const userId = ctx.from.id;
   db.getExpenses(userId, (rows) => {
-    if (!rows.length) return ctx.reply('У тебя пока нет трат для экспорта.');
+    if (!rows.length) return ctx.reply('У тебя пока нет трат для экспорта.', backButton());
     const content = rows.map(e => `${e.timestamp} - ${e.category}: ${e.amount}₽`).join('\n');
     require('fs').writeFileSync(`export_${userId}.txt`, content);
     ctx.replyWithDocument({ source: `export_${userId}.txt` });
@@ -61,7 +70,7 @@ bot.hears('📅 Фильтр по дате', (ctx) => {
   userStates[ctx.from.id] = { stage: 'awaiting_filter_choice' };
   ctx.reply('Выбери период:', Markup.keyboard([
     ['Сегодня', 'Неделя', 'Месяц'],
-    ['⬅️ Назад']
+    ['🔙 Вернуться в меню']
   ]).resize());
 });
 
@@ -70,10 +79,15 @@ bot.on('text', (ctx) => {
   const text = ctx.message.text;
   const state = userStates[userId] || {};
 
+  if (text === '🔙 Вернуться в меню') {
+    userStates[userId] = {};
+    return ctx.reply('Главное меню:', mainMenu());
+  }
+
   if (state.stage === 'awaiting_limit') {
     const limit = parseFloat(text.replace(',', '.'));
     if (isNaN(limit)) {
-      ctx.reply('Это не число. Введи лимит снова:');
+      ctx.reply('Это не число. Введи лимит снова:', backButton());
     } else {
       db.setDailyLimit(userId, limit);
       userStates[userId] = {};
@@ -83,21 +97,16 @@ bot.on('text', (ctx) => {
   }
 
   if (state.stage === 'awaiting_filter_choice') {
-    if (text === '⬅️ Назад') {
-      userStates[userId] = {};
-      return ctx.reply('Возвращаемся в меню.', mainMenu());
-    }
-
     let period = '';
     if (text === 'Сегодня') period = 'day';
     else if (text === 'Неделя') period = 'week';
     else if (text === 'Месяц') period = 'month';
-    else return ctx.reply('Неверный выбор. Пожалуйста, выбери из списка.');
+    else return ctx.reply('Неверный выбор. Пожалуйста, выбери из списка.', backButton());
 
     db.getFilteredExpenses(userId, period, (rows) => {
-      if (!rows.length) return ctx.reply('Нет трат за выбранный период.');
+      if (!rows.length) return ctx.reply('Нет трат за выбранный период.', backButton());
       const list = rows.map((e, i) => `${i + 1}. ${e.timestamp.split('T')[0]} — ${e.category}: ${e.amount}₽`).join('\n');
-      ctx.reply(`Твои траты за период «${text}»:\n\n${list}`, mainMenu());
+      ctx.reply(`Твои траты за период «${text}»:\n\n${list}`, backButton());
     });
     userStates[userId] = {};
     return;
@@ -106,17 +115,17 @@ bot.on('text', (ctx) => {
   if (state.stage === 'awaiting_category' && categories.includes(text)) {
     state.category = text;
     state.stage = 'awaiting_amount';
-    ctx.reply(`Введи сумму для категории "${text}":`);
+    ctx.reply(`Введи сумму для категории "${text}":`, backButton());
   } else if (state.stage === 'awaiting_amount') {
     const amount = parseFloat(text.replace(',', '.'));
     if (isNaN(amount)) {
-      ctx.reply('Это не похоже на число. Попробуй ещё раз.');
+      ctx.reply('Это не похоже на число. Попробуй ещё раз.', backButton());
     } else {
       state.amount = amount;
       state.stage = 'awaiting_confirmation';
       ctx.reply(
         `Подтверди трату: ${state.category} — ${amount}₽`,
-        Markup.keyboard(['✅ Подтвердить', '❌ Отмена']).resize()
+        Markup.keyboard(['✅ Подтвердить', '❌ Отмена', '🔙 Вернуться в меню']).resize()
       );
     }
   } else if (state.stage === 'awaiting_confirmation') {
@@ -139,13 +148,13 @@ bot.on('text', (ctx) => {
     }
   } else if (text === '📜 Посмотреть траты') {
     db.getExpenses(userId, (rows) => {
-      if (!rows.length) return ctx.reply('У тебя пока нет трат.');
+      if (!rows.length) return ctx.reply('У тебя пока нет трат.', backButton());
       const list = rows.map((e, i) => `${i + 1}. ${e.category} — ${e.amount}₽`).join('\n');
-      ctx.reply(`Твои траты:\n\n${list}`);
+      ctx.reply(`Твои траты:\n\n${list}`, backButton());
     });
   } else if (text === '♻️ Сброс') {
     db.resetExpenses(userId);
-    ctx.reply('Все траты удалены.');
+    ctx.reply('Все траты удалены.', mainMenu());
   }
 });
 
