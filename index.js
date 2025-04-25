@@ -38,7 +38,7 @@ bot.use(async (ctx, next) => {
     const subscribed = await isUserSubscribed(ctx);
     if (!subscribed) {
       return ctx.reply(
-        'Пожалуйста, подпишись на наш канал ${CHANNEL_USERNAME} перед использованием бота.',
+        'Пожалуйста, подпишись на наш канал FedyFefu перед использованием бота.',
         Markup.inlineKeyboard([
           Markup.button.url('Подписаться', `https://t.me/${CHANNEL_USERNAME.replace('@', '')}`),
         ])
