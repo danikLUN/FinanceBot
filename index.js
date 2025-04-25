@@ -5,7 +5,7 @@ const db = require('./db');
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const userStates = {};
-const REQUIRED_CHANNEL = '@your_channel_username';
+const REQUIRED_CHANNEL = '@FEDYFEFU';
 
 const categories = ['Еда', 'Транспорт', 'Одежда', 'Развлечения', 'Другое'];
 
