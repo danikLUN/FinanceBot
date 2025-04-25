@@ -5,7 +5,7 @@ const db = require('./db');
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const userStates = {};
-const CHANNEL_USERNAME = '@FEDYFEFU'; // Заменить на название твоего канала
+const REQUIRED_CHANNEL = '@your_channel_username';
 
 const categories = ['Еда', 'Транспорт', 'Одежда', 'Развлечения', 'Другое'];
 
@@ -25,43 +25,46 @@ function backButton() {
 
 async function checkSubscription(ctx) {
   try {
-    const userId = ctx.from.id;
-    const chatMember = await ctx.telegram.getChatMember(CHANNEL_USERNAME, userId);
-    return ['member', 'creator', 'administrator'].includes(chatMember.status);
+    const member = await ctx.telegram.getChatMember(REQUIRED_CHANNEL, ctx.from.id);
+    return ['member', 'creator', 'administrator'].includes(member.status);
   } catch (error) {
-    console.error('Ошибка проверки подписки:', error.message);
+    console.error('Ошибка при проверке подписки:', error);
     return false;
   }
 }
 
-bot.start(async (ctx) => {
-  const isSubscribed = await checkSubscription(ctx);
-
-  if (!isSubscribed) {
-    return ctx.reply(
-      'Для использования бота нужно подписаться на наш канал:',
-      Markup.inlineKeyboard([
-        Markup.button.url('🔔 Подписаться', `https://t.me/${CHANNEL_USERNAME.replace('@', '')}`),
-        Markup.button.callback('✅ Я подписался', 'check_subscription')
-      ])
-    );
+bot.use(async (ctx, next) => {
+  if (ctx.message && ctx.message.text && ctx.message.text !== '✅ Я подписался') {
+    const subscribed = await checkSubscription(ctx);
+    if (!subscribed) {
+      return ctx.reply(
+        'Для использования бота подпишись на наш канал и нажми кнопку ниже.',
+        Markup.inlineKeyboard([
+          [Markup.button.url('Перейти в канал', `https://t.me/${REQUIRED_CHANNEL.replace('@', '')}`)],
+          [Markup.button.callback('✅ Я подписался', 'check_sub')] 
+        ])
+      );
+    }
   }
+  await next();
+});
 
+bot.action('check_sub', async (ctx) => {
+  const subscribed = await checkSubscription(ctx);
+  if (subscribed) {
+    userStates[ctx.from.id] = {};
+    await ctx.answerCbQuery();
+    await ctx.reply('Спасибо за подписку! Вот меню:', mainMenu());
+  } else {
+    await ctx.answerCbQuery('Подписка не обнаружена. Попробуй снова.');
+  }
+});
+
+bot.start((ctx) => {
   userStates[ctx.from.id] = {};
   ctx.reply('Привет! Что хочешь сделать?', mainMenu());
 });
 
-bot.action('check_subscription', async (ctx) => {
-  const isSubscribed = await checkSubscription(ctx);
-  await ctx.answerCbQuery();
-
-  if (isSubscribed) {
-    userStates[ctx.from.id] = {};
-    ctx.reply('Спасибо за подписку! Вот главное меню:', mainMenu());
-  } else {
-    ctx.answerCbQuery('Похоже, ты ещё не подписался', { show_alert: true });
-  }
-});
 bot.hears('🔄 Перезапуск', (ctx) => {
   userStates[ctx.from.id] = {};
   ctx.reply('Бот перезапущен', mainMenu());
