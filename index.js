@@ -5,6 +5,7 @@ const db = require('./db');
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const userStates = {};
+const CHANNEL_USERNAME = '@FEDYFEFU'; // замени на свой username
 
 const categories = ['Еда', 'Транспорт', 'Одежда', 'Развлечения', 'Другое'];
 
@@ -22,6 +23,55 @@ function backButton() {
   return Markup.keyboard([['🔙 Вернуться в меню']]).resize();
 }
 
+async function isUserSubscribed(ctx) {
+  try {
+    const member = await ctx.telegram.getChatMember(CHANNEL_USERNAME, ctx.from.id);
+    return ['creator', 'administrator', 'member'].includes(member.status);
+  } catch (err) {
+    console.error('Ошибка при проверке подписки:', err);
+    return false;
+  }
+}
+
+bot.use(async (ctx, next) => {
+  if (ctx.message && ctx.message.text !== '/start') {
+    const subscribed = await isUserSubscribed(ctx);
+    if (!subscribed) {
+      return ctx.reply(
+        'Пожалуйста, подпишись на наш канал ${CHANNEL_USERNAME} перед использованием бота.',
+        Markup.inlineKeyboard([
+          Markup.button.url('Подписаться', `https://t.me/${CHANNEL_USERNAME.replace('@', '')}`),
+        ])
+      );
+    }
+  }
+  return next();
+});
+
+bot.start(async (ctx) => {
+  const subscribed = await isUserSubscribed(ctx);
+  if (!subscribed) {
+    return ctx.reply(
+      'Пожалуйста, подпишись на наш канал ${CHANNEL_USERNAME} перед использованием бота.',
+      Markup.inlineKeyboard([
+        Markup.button.url('Подписаться', `https://t.me/${CHANNEL_USERNAME.replace('@', '')}`),
+        Markup.button.callback('Я подписался', 'check_subscription')
+      ])
+    );
+  }
+  userStates[ctx.from.id] = {};
+  ctx.reply('Привет! Что хочешь сделать?', mainMenu());
+});
+
+bot.action('check_subscription', async (ctx) => {
+  const subscribed = await isUserSubscribed(ctx);
+  if (subscribed) {
+    userStates[ctx.from.id] = {};
+    ctx.reply('Спасибо за подписку! Вот главное меню:', mainMenu());
+  } else {
+    ctx.reply('Похоже, ты всё ещё не подписался. Попробуй ещё раз.');
+  }
+});
 bot.start((ctx) => {
   userStates[ctx.from.id] = {};
   ctx.reply('Привет! Что хочешь сделать?', mainMenu());
