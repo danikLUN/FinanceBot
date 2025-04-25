@@ -5,7 +5,7 @@ const db = require('./db');
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const userStates = {};
-const CHANNEL_USERNAME = '@FEDYFEFU'; // замени на свой username
+const CHANNEL_USERNAME = '@FEDYFEFU'; // Заменить на название твоего канала
 
 const categories = ['Еда', 'Транспорт', 'Одежда', 'Развлечения', 'Другое'];
 
@@ -23,60 +23,45 @@ function backButton() {
   return Markup.keyboard([['🔙 Вернуться в меню']]).resize();
 }
 
-async function isUserSubscribed(ctx) {
+async function checkSubscription(ctx) {
   try {
-    const member = await ctx.telegram.getChatMember(CHANNEL_USERNAME, ctx.from.id);
-    return ['creator', 'administrator', 'member'].includes(member.status);
-  } catch (err) {
-    console.error('Ошибка при проверке подписки:', err);
+    const userId = ctx.from.id;
+    const chatMember = await ctx.telegram.getChatMember(CHANNEL_USERNAME, userId);
+    return ['member', 'creator', 'administrator'].includes(chatMember.status);
+  } catch (error) {
+    console.error('Ошибка проверки подписки:', error.message);
     return false;
   }
 }
 
-bot.use(async (ctx, next) => {
-  if (ctx.message && ctx.message.text !== '/start') {
-    const subscribed = await isUserSubscribed(ctx);
-    if (!subscribed) {
-      return ctx.reply(
-        'Пожалуйста, подпишись на наш канал FedyFefu перед использованием бота.',
-        Markup.inlineKeyboard([
-          Markup.button.url('Подписаться', `https://t.me/${CHANNEL_USERNAME.replace('@', '')}`),
-        ])
-      );
-    }
-  }
-  return next();
-});
-
 bot.start(async (ctx) => {
-  const subscribed = await isUserSubscribed(ctx);
-  if (!subscribed) {
+  const isSubscribed = await checkSubscription(ctx);
+
+  if (!isSubscribed) {
     return ctx.reply(
-      'Пожалуйста, подпишись на наш канал ${CHANNEL_USERNAME} перед использованием бота.',
+      'Для использования бота нужно подписаться на наш канал:',
       Markup.inlineKeyboard([
-        Markup.button.url('Подписаться', `https://t.me/${CHANNEL_USERNAME.replace('@', '')}`),
-        Markup.button.callback('Я подписался', 'check_subscription')
+        Markup.button.url('🔔 Подписаться', `https://t.me/${CHANNEL_USERNAME.replace('@', '')}`),
+        Markup.button.callback('✅ Я подписался', 'check_subscription')
       ])
     );
   }
+
   userStates[ctx.from.id] = {};
   ctx.reply('Привет! Что хочешь сделать?', mainMenu());
 });
 
 bot.action('check_subscription', async (ctx) => {
-  const subscribed = await isUserSubscribed(ctx);
-  if (subscribed) {
+  const isSubscribed = await checkSubscription(ctx);
+  await ctx.answerCbQuery();
+
+  if (isSubscribed) {
     userStates[ctx.from.id] = {};
     ctx.reply('Спасибо за подписку! Вот главное меню:', mainMenu());
   } else {
-    ctx.reply('Похоже, ты всё ещё не подписался. Попробуй ещё раз.');
+    ctx.answerCbQuery('Похоже, ты ещё не подписался', { show_alert: true });
   }
 });
-bot.start((ctx) => {
-  userStates[ctx.from.id] = {};
-  ctx.reply('Привет! Что хочешь сделать?', mainMenu());
-});
-
 bot.hears('🔄 Перезапуск', (ctx) => {
   userStates[ctx.from.id] = {};
   ctx.reply('Бот перезапущен', mainMenu());
